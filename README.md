@@ -54,34 +54,37 @@ config for that kid's display.
 
 ## ESP32 display setup
 
-Hardware: any ESP32 dev board + an SSD1309 OLED wired for 4-wire SPI.
+Hardware: an Arduino Nano ESP32 + an SSD1309 OLED wired for 4-wire SPI, plus
+an optional momentary push button for advancing to the next task.
 
 Default wiring assumed by the sketch (change in `config.h` if you wired it
-differently):
+differently). Note the Nano ESP32 uses Arduino's classic Nano pin labels
+(D0–D13), not raw GPIO numbers — see [pinout](https://docs.arduino.cc/hardware/nano-esp32/):
 
-| OLED pin | ESP32 pin |
-|---|---|
-| CS  | GPIO 5 |
-| DC  | GPIO 17 |
-| RES | GPIO 16 |
-| SCK | GPIO 18 (VSPI default) |
-| DIN/MOSI | GPIO 23 (VSPI default) |
-| VCC | 3.3V |
-| GND | GND |
+| Part | Pin | Nano ESP32 pin | Notes |
+|---|---|---|---|
+| OLED | SCK | D13 | Fixed — hardware SPI clock |
+| OLED | SDA | D11 | Fixed — hardware SPI MOSI (labeled "SDA" but it's not I2C) |
+| OLED | CS  | D10 | Any free digital pin |
+| OLED | DC  | D2  | Any free digital pin |
+| OLED | RES | D3  | Any free digital pin |
+| OLED | VCC | 3.3V | Not 5V |
+| OLED | GND | GND | |
+| Button | signal | D4 | Module has its own pull-down resistor (idles LOW, HIGH when pressed) — also wire its VCC/GND pins |
 
 ### Firmware setup
 
 1. In the Arduino IDE, install these libraries (Library Manager):
    - **U8g2** by olikraus
    - **ArduinoJson** by Benoit Blanchon (v6 or v7)
-   - Install ESP32 board support if you haven't already (Boards Manager →
-     "esp32" by Espressif Systems).
+   - Install the "Arduino ESP32 Boards" package (Boards Manager) and select
+     "Arduino Nano ESP32" as the board.
 2. Open `esp32/esp32_oled_display/esp32_oled_display.ino`.
 3. Copy `config.example.h` to `config.h` in the same folder and fill in:
    - Your WiFi SSID/password
    - `SERVER_HOST` — your Docker host's LAN IP (e.g. `192.168.1.50`)
    - `KID_ID` — which kid this display is for (check `admin.html`)
-4. Flash it to the ESP32. On boot it connects to WiFi, then polls
+4. Flash it to the board. On boot it connects to WiFi, then polls
    `GET /api/kids/<id>/display` every 4 seconds and shows:
    - The kid's name and a small connectivity dot (or "OFF" if the last
      poll failed)
@@ -89,11 +92,17 @@ differently):
    - A `task N / total` counter and a progress bar
    - A celebratory "ALL DONE!" screen with the star count once every task
      for that day is complete
+5. Pressing the button calls `POST /api/kids/<id>/advance`, which marks
+   whichever task is currently active as done (same effect as tapping
+   "Done!" in the web app), then immediately re-polls so the OLED updates
+   without waiting for the next 4-second cycle. The button is debounced in
+   firmware, so a single press only advances one task.
 
-Want a display for each kid? Flash multiple ESP32 boards, each with its own
+Want a display for each kid? Flash multiple boards, each with its own
 `config.h` pointing at a different `KID_ID` — they all hit the same server.
 
-The `/api/kids/:id/display` endpoint is intentionally small/cheap (no auth,
-plain JSON) since it's meant to be polled repeatedly from a microcontroller
-on your home LAN. Don't expose the server directly to the internet without
-adding your own auth/reverse proxy in front of it.
+The `/api/kids/:id/display` and `/api/kids/:id/advance` endpoints are
+intentionally small/cheap (no auth, plain JSON) since they're meant to be
+hit repeatedly from a microcontroller on your home LAN. Don't expose the
+server directly to the internet without adding your own auth/reverse proxy
+in front of it.

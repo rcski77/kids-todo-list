@@ -26,6 +26,13 @@ unsigned long lastPoll = 0;
 bool haveData = false;
 bool lastFetchOk = false;
 
+// Button debounce state. The module has its own pull-down resistor, so the
+// pin idles LOW and reads HIGH when pressed (opposite of INPUT_PULLUP).
+int buttonState = LOW;
+int lastButtonReading = LOW;
+unsigned long lastButtonChange = 0;
+const unsigned long DEBOUNCE_MS = 40;
+
 String kidName;
 int taskIndex = 0;
 int totalTasks = 0;
@@ -37,6 +44,7 @@ int starsEarned = 0;
 
 void setup() {
   Serial.begin(115200);
+  pinMode(BUTTON_PIN, INPUT); // external pull-down on the button module
   u8g2.begin();
   u8g2.setContrast(180);
 
@@ -53,12 +61,57 @@ void setup() {
 }
 
 void loop() {
+  checkButton();
+
   if (millis() - lastPoll >= POLL_INTERVAL_MS || lastPoll == 0) {
     lastPoll = millis();
     fetchDisplayState();
     render();
   }
-  delay(50);
+  delay(10);
+}
+
+// Debounced button check. Fires advanceTask() once per physical press
+// (on the LOW->HIGH transition), not repeatedly while held down.
+void checkButton() {
+  int reading = digitalRead(BUTTON_PIN);
+
+  if (reading != lastButtonReading) {
+    lastButtonChange = millis();
+  }
+
+  if (millis() - lastButtonChange > DEBOUNCE_MS && reading != buttonState) {
+    buttonState = reading;
+    Serial.printf("BUTTON_PIN (D4) is now %s\n", buttonState == HIGH ? "HIGH (pressed)" : "LOW (released)");
+    if (buttonState == HIGH) {
+      advanceTask();
+    }
+  }
+
+  lastButtonReading = reading;
+}
+
+// Tells the server to mark the current task done, then immediately
+// refreshes the display so it doesn't wait for the next poll cycle.
+void advanceTask() {
+  if (WiFi.status() != WL_CONNECTED) return;
+
+  HTTPClient http;
+  String url = "http://" + String(SERVER_HOST) + ":" + String(SERVER_PORT) +
+               "/api/kids/" + String(KID_ID) + "/advance";
+  http.begin(url);
+  http.setTimeout(4000);
+  int code = http.POST("");
+  http.end();
+
+  if (code != 200) {
+    Serial.printf("POST %s failed, code=%d\n", url.c_str(), code);
+    return;
+  }
+
+  lastPoll = millis();
+  fetchDisplayState();
+  render();
 }
 
 void fetchDisplayState() {

@@ -38,6 +38,28 @@ db.exec(`
   );
 `);
 
+const DEFAULT_TASKS = [
+  ['⏰', 'Wake Up & Stretch', 'Big stretch — arms up high!', 0, 0],
+  ['🚽', 'Potty Time', 'Go to the bathroom', 0, 0],
+  ['🍳', 'Eat Breakfast', 'Fuel up for your mission!', 0, 0],
+  ['💧', 'Wash Face and Hands', 'Splash splash!', 0, 0],
+  ['🪥', 'Brush Teeth', 'Top and bottom — 2 whole minutes!', 1, 120],
+  ['👕', 'Get Dressed', 'Clothes are ready for you!', 0, 0],
+  ['🎒', 'Pack Your Backpack', 'Lunch, Folder, Water bottle', 0, 0],
+  ['👟', 'Shoes and Jacket On', 'Almost time to blast off!', 0, 0],
+  ['🚪', 'Out the Door!', 'MISSION COMPLETE!', 0, 0],
+];
+
+function seedDefaultTasks(kidId) {
+  const insertTask = db.prepare(`
+    INSERT INTO tasks (kid_id, sort_order, emoji, name, detail, has_timer, timer_seconds)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `);
+  DEFAULT_TASKS.forEach((t, i) => {
+    insertTask.run(kidId, i, t[0], t[1], t[2], t[3], t[4]);
+  });
+}
+
 // Seed a default kid + the original morning routine tasks on first run.
 const kidCount = db.prepare('SELECT COUNT(*) AS n FROM kids').get().n;
 if (kidCount === 0) {
@@ -45,27 +67,8 @@ if (kidCount === 0) {
     'INSERT INTO kids (name, emoji, color, sort_order) VALUES (?, ?, ?, ?)'
   );
   const { lastInsertRowid: kidId } = insertKid.run('Buddy', '🚀', '#FFB800', 0);
-
-  const insertTask = db.prepare(`
-    INSERT INTO tasks (kid_id, sort_order, emoji, name, detail, has_timer, timer_seconds)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
-  `);
-
-  const defaultTasks = [
-    ['⏰', 'Wake Up & Stretch', 'Big stretch — arms up high!', 0, 0],
-    ['🚽', 'Potty Time', 'Go to the bathroom', 0, 0],
-    ['🍳', 'Eat Breakfast', 'Fuel up for your mission!', 0, 0],
-    ['💧', 'Wash Face and Hands', 'Splash splash!', 0, 0],
-    ['🪥', 'Brush Teeth', 'Top and bottom — 2 whole minutes!', 1, 120],
-    ['👕', 'Get Dressed', 'Clothes are ready for you!', 0, 0],
-    ['🎒', 'Pack Your Backpack', 'Lunch, Folder, Water bottle', 0, 0],
-    ['👟', 'Shoes and Jacket On', 'Almost time to blast off!', 0, 0],
-    ['🚪', 'Out the Door!', 'MISSION COMPLETE!', 0, 0],
-  ];
-
-  defaultTasks.forEach((t, i) => {
-    insertTask.run(kidId, i, t[0], t[1], t[2], t[3], t[4]);
-  });
+  seedDefaultTasks(kidId);
 }
 
 module.exports = db;
+module.exports.seedDefaultTasks = seedDefaultTasks;

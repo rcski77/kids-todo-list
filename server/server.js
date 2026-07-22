@@ -71,6 +71,7 @@ app.post('/api/kids', (req, res) => {
   const result = db
     .prepare('INSERT INTO kids (name, emoji, color, sort_order) VALUES (?, ?, ?, ?)')
     .run(name, emoji || '🧒', color || '#FFB800', maxOrder + 1);
+  db.seedDefaultTasks(result.lastInsertRowid);
   const kid = db.prepare('SELECT * FROM kids WHERE id = ?').get(result.lastInsertRowid);
   res.status(201).json(kid);
 });
@@ -127,6 +128,21 @@ app.post('/api/kids/:kidId/complete/:taskId', (req, res) => {
   db.prepare(
     'INSERT OR IGNORE INTO completions (task_id, kid_id, day, completed_at) VALUES (?, ?, ?, ?)'
   ).run(req.params.taskId, kid.id, day, new Date().toISOString());
+  res.json(buildState(kid));
+});
+
+// Completes whichever task is currently active, without the caller needing
+// to know its id — used by the ESP32's physical "next task" button.
+app.post('/api/kids/:kidId/advance', (req, res) => {
+  const kid = getKidOr404(req, res);
+  if (!kid) return;
+  const state = buildState(kid);
+  if (state.currentTaskId) {
+    const day = today();
+    db.prepare(
+      'INSERT OR IGNORE INTO completions (task_id, kid_id, day, completed_at) VALUES (?, ?, ?, ?)'
+    ).run(state.currentTaskId, kid.id, day, new Date().toISOString());
+  }
   res.json(buildState(kid));
 });
 

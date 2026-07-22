@@ -18,11 +18,17 @@
 // How often to poll the server, in milliseconds.
 #define POLL_INTERVAL_MS 4000
 
-// SSD1309 SPI wiring (defaults match a typical ESP32 DevKit + 4-wire SPI OLED).
-// Change these to match how you actually wired the board.
-#define OLED_PIN_CS   5
-#define OLED_PIN_DC   17
-#define OLED_PIN_RESET 16
-// SCK/MOSI use the ESP32's default hardware VSPI pins (SCK=18, MOSI/DIN=23).
+// SSD1309 SPI wiring for an Arduino Nano ESP32.
+// CS/DC/RESET can be any free digital pin; SCK/SDA(MOSI) must be the board's
+// hardware SPI pins, which on the Nano ESP32 are fixed at D13/D11.
+#define OLED_PIN_CS    10  // D10
+#define OLED_PIN_DC    2   // D2
+#define OLED_PIN_RESET 3   // D3
+// OLED "SCK" -> board D13, OLED "SDA" (MOSI/DIN) -> board D11 (fixed, hardware SPI).
+
+// "Next task" push button (module has its own pull-down resistor: signal
+// pin idles LOW, reads HIGH when pressed). Wire signal -> this pin,
+// plus VCC and GND to the module's power pins.
+#define BUTTON_PIN 4  // D4
 
 #endif
