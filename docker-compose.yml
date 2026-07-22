@@ -1,0 +1,16 @@
+services:
+  kids-todo-list:
+    build:
+      context: .
+      dockerfile: server/Dockerfile
+    container_name: kids-todo-list
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - TZ=America/New_York
+    volumes:
+      - kids-todo-data:/app/server/data
+
+volumes:
+  kids-todo-data:

@@ -1,0 +1,13 @@
+{
+  "name": "kids-todo-server",
+  "version": "1.0.0",
+  "description": "Multi-kid morning routine tracker with API for web UI and ESP32 displays",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.3.0",
+    "express": "^4.19.2"
+  }
+}

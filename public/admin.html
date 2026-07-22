@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Morning Mission — Admin</title>
+<style>
+  body { font-family: 'Segoe UI', sans-serif; background: #f4f6f8; margin: 0; padding: 20px; color: #222; }
+  .wrap { max-width: 720px; margin: 0 auto; }
+  h1 { font-size: 1.4rem; margin-bottom: 4px; }
+  a.back { font-size: 0.85rem; color: #1565C0; text-decoration: none; }
+  section { background: #fff; border-radius: 12px; padding: 16px 20px; margin-top: 18px; box-shadow: 0 2px 10px rgba(0,0,0,0.06); }
+  h2 { font-size: 1.05rem; margin-bottom: 10px; }
+  .kid-block { border: 1px solid #e0e0e0; border-radius: 10px; padding: 12px 14px; margin-bottom: 12px; }
+  .kid-title { font-weight: 700; display: flex; justify-content: space-between; align-items: center; }
+  table { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 0.85rem; }
+  th, td { text-align: left; padding: 4px 6px; border-bottom: 1px solid #eee; }
+  input, select { padding: 6px 8px; border: 1px solid #ccc; border-radius: 6px; font-size: 0.85rem; }
+  button { padding: 6px 12px; border: none; border-radius: 6px; background: #1565C0; color: #fff; font-weight: 700; cursor: pointer; font-size: 0.85rem; }
+  button.danger { background: #c62828; }
+  form.inline { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; align-items: center; }
+  .esp-url { font-family: monospace; background: #f0f0f0; padding: 2px 6px; border-radius: 4px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>⚙️ Morning Mission — Admin</h1>
+  <a class="back" href="index.html">← Back to the app</a>
+
+  <section>
+    <h2>Add a kid</h2>
+    <form class="inline" id="addKidForm">
+      <input name="name" placeholder="Name" required>
+      <input name="emoji" placeholder="Emoji" value="🧒" style="width:50px" maxlength="4">
+      <input name="color" type="color" value="#FFB800">
+      <button type="submit">Add kid</button>
+    </form>
+  </section>
+
+  <section>
+    <h2>Kids &amp; tasks</h2>
+    <div id="kidsList">Loading…</div>
+  </section>
+</div>
+
+<script src="admin.js"></script>
+</body>
+</html>

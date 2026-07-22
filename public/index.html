@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Morning Mission!</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="sun"></div>
+<div class="cloud c1"></div>
+<div class="cloud c2"></div>
+<div class="confetti-wrap" id="confettiWrap"></div>
+
+<div class="app">
+
+  <header>
+    <div class="title">🚀 Morning Mission!</div>
+  </header>
+
+  <div class="kid-selector" id="kidSelector"></div>
+
+  <!-- Global countdown timer -->
+  <div class="global-timer">
+    <div class="g-arc-wrap">
+      <svg viewBox="0 0 52 52">
+        <circle class="g-arc-bg"   cx="26" cy="26" r="21"/>
+        <circle class="g-arc-fill" id="gArcFill" cx="26" cy="26" r="21"
+          stroke-dasharray="131.95" stroke-dashoffset="0"/>
+      </svg>
+    </div>
+    <div class="g-time" id="gTime">–:––</div>
+    <div class="g-timer-right">
+      <div class="g-presets" id="gPresets"></div>
+      <div class="g-btns">
+        <button class="g-btn go" id="gGoBtn">▶ Start</button>
+        <button class="g-btn rst" id="gRstBtn">↺ Reset</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="kidContent"></div>
+
+</div>
+
+<!-- All-done overlay -->
+<div class="done-screen" id="doneScreen">
+  <div class="done-rocket">🚀</div>
+  <div class="done-title">BLAST OFF!</div>
+  <div class="done-msg">You crushed your morning mission!<br>You are a SUPERSTAR — let's go!</div>
+  <div class="done-stars" id="doneStars"></div>
+  <button class="reset-btn" id="doneResetBtn">🔄 New Morning</button>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
