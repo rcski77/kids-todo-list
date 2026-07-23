@@ -29,7 +29,7 @@ async function loadKids() {
       <table>
         <colgroup>
           <col style="width:24px"><col style="width:60px"><col style="width:22%">
-          <col style="width:32%"><col style="width:110px"><col style="width:64px"><col style="width:36px">
+          <col style="width:32%"><col style="width:140px"><col style="width:64px"><col style="width:36px">
         </colgroup>
         <thead><tr><th></th><th>Emoji</th><th>Name</th><th>Detail</th><th>Timer</th><th></th><th></th></tr></thead>
         <tbody data-tasks-for-kid="${kid.id}">
