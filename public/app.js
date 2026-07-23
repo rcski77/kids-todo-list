@@ -12,6 +12,8 @@ const POLL_MS = 4000;
 let kids = [];
 let currentKidId = null;
 let lastStateJSON = null;
+let currentView = 'tasks';
+let pottySummary = null;
 
 // ── Global "get ready" timer (local, not tied to any kid) ──
 let gTotal = 0, gLeft = 0, gRunning = false, gInterval = null;
@@ -42,6 +44,11 @@ async function init() {
   document.getElementById('doneResetBtn').onclick = resetKid;
   updateTimerUI();
 
+  document.querySelectorAll('.view-tab').forEach((btn) => {
+    btn.onclick = () => switchView(btn.dataset.view);
+  });
+  renderPottySkeleton();
+
   kids = await api('/kids');
   if (kids.length === 0) {
     document.getElementById('kidContent').innerHTML =
@@ -56,6 +63,14 @@ async function init() {
   renderKidSkeleton();
   await refreshState();
   setInterval(refreshState, POLL_MS);
+}
+
+function switchView(view) {
+  currentView = view;
+  document.querySelectorAll('.view-tab').forEach((b) => b.classList.toggle('active', b.dataset.view === view));
+  document.getElementById('tasksView').style.display = view === 'tasks' ? '' : 'none';
+  document.getElementById('pottyView').style.display = view === 'potty' ? '' : 'none';
+  if (view === 'potty') refreshPotty();
 }
 
 function renderKidSelector() {
@@ -79,6 +94,7 @@ async function selectKid(id) {
   renderKidSkeleton();
   document.getElementById('doneScreen').classList.remove('visible');
   await refreshState();
+  if (currentView === 'potty') await refreshPotty();
 }
 
 function renderKidSkeleton() {
@@ -223,6 +239,101 @@ function showDoneScreen(state) {
   el.classList.add('visible');
   document.getElementById('doneStars').innerHTML = state.tasks.map(() => '⭐').join('');
   bigConfetti();
+}
+
+/* ═══ POTTY TRACKER ═══ */
+// Lets a parent flip which mode a kid's ESP32 is showing (task list vs.
+// potty counter), and shows a "high score" style chart of daily counts —
+// the counts themselves come from the physical button press on the ESP32
+// (or the manual buttons here, e.g. if the ESP32 is offline).
+function renderPottySkeleton() {
+  document.getElementById('pottyContent').innerHTML = `
+    <div class="potty-mode-card">
+      <div class="potty-mode-label">📟 ESP32 is showing</div>
+      <div class="potty-mode-switch" id="pottyModeSwitch">
+        <button class="mode-btn" data-mode="tasks">📋 To-Do List</button>
+        <button class="mode-btn" data-mode="potty">🚽 Potty Counter</button>
+      </div>
+    </div>
+    <div class="potty-today-card">
+      <div class="potty-today-count" id="pottyTodayCount">0</div>
+      <div class="potty-today-sub">🚽 visits today</div>
+      <div class="potty-today-btns">
+        <button class="potty-add-btn" id="pottyAddBtn">➕ Log a visit</button>
+        <button class="potty-undo-btn" id="pottyUndoBtn">↺ Oops, undo</button>
+      </div>
+    </div>
+    <div class="potty-chart-card">
+      <div class="potty-chart-title">🏆 Last 7 Days<span id="pottyBest"></span></div>
+      <div class="potty-chart" id="pottyChart"></div>
+    </div>
+  `;
+  document.getElementById('pottyAddBtn').onclick = logPotty;
+  document.getElementById('pottyUndoBtn').onclick = undoPotty;
+  document.querySelectorAll('#pottyModeSwitch .mode-btn').forEach((btn) => {
+    btn.onclick = () => setDisplayMode(btn.dataset.mode);
+  });
+}
+
+async function refreshPotty() {
+  if (!currentKidId) return;
+  try {
+    pottySummary = await api(`/kids/${currentKidId}/potty`);
+  } catch (e) {
+    return; // server hiccup — just try again next tab visit
+  }
+  renderPotty();
+}
+
+function renderPotty() {
+  if (!pottySummary) return;
+
+  document.getElementById('pottyTodayCount').textContent = pottySummary.today;
+  document.getElementById('pottyBest').textContent =
+    pottySummary.best > 0 ? ` · Best: ${pottySummary.best}` : '';
+
+  const kid = kids.find((k) => k.id === currentKidId);
+  const mode = (kid && kid.display_mode) || 'tasks';
+  document.querySelectorAll('#pottyModeSwitch .mode-btn').forEach((btn) => {
+    btn.classList.toggle('active', btn.dataset.mode === mode);
+  });
+
+  const chart = document.getElementById('pottyChart');
+  const max = Math.max(1, ...pottySummary.history.map((h) => h.count));
+  chart.innerHTML = pottySummary.history
+    .map((h) => {
+      const dayLabel = new Date(`${h.day}T00:00:00`).toLocaleDateString('en-US', { weekday: 'short' })[0];
+      const pct = Math.max(4, Math.round((h.count / max) * 100));
+      const isBest = h.count > 0 && h.count === pottySummary.best;
+      return `
+        <div class="potty-bar-col">
+          <div class="potty-bar-count">${isBest ? '🏆 ' : ''}${h.count}</div>
+          <div class="potty-bar-track"><div class="potty-bar-fill" style="height:${pct}%"></div></div>
+          <div class="potty-bar-label">${dayLabel}</div>
+        </div>`;
+    })
+    .join('');
+}
+
+async function logPotty() {
+  pottySummary = await api(`/kids/${currentKidId}/potty`, { method: 'POST' });
+  renderPotty();
+  miniConfetti();
+}
+
+async function undoPotty() {
+  pottySummary = await api(`/kids/${currentKidId}/potty/undo`, { method: 'POST' });
+  renderPotty();
+}
+
+async function setDisplayMode(mode) {
+  const kid = await api(`/kids/${currentKidId}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ displayMode: mode }),
+  });
+  const idx = kids.findIndex((k) => k.id === kid.id);
+  if (idx !== -1) kids[idx] = kid;
+  renderPotty();
 }
 
 /* ═══ GLOBAL "GET READY" TIMER ═══ */

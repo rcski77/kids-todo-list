@@ -43,6 +43,14 @@ String taskDetail;
 bool allDone = false;
 int starsEarned = 0;
 
+// Which mode this kid's display/button are in right now, set from the
+// website (admin can flip a kid between the task list and the potty
+// counter). "tasks" behaves as before; "potty" repurposes the same
+// physical button to log a bathroom visit instead of advancing a task.
+String displayMode = "tasks";
+int pottyToday = 0;
+int pottyBest = 0;
+
 // Timer for the current task (e.g. brush teeth), mirrored from the server's
 // /display feed. remainingAtSync/syncedAtMillis let us tick the countdown
 // locally between polls instead of only updating it every 4 seconds.
@@ -111,15 +119,41 @@ void checkButton() {
   lastButtonReading = reading;
 }
 
-// For a timer task that hasn't been started yet, the first press starts
-// the timer instead of advancing. Any other press (no timer, or the timer
-// task has already been started at least once) advances to the next task.
+// In "potty" mode the button just logs a bathroom visit. In "tasks" mode:
+// for a timer task that hasn't been started yet, the first press starts the
+// timer instead of advancing. Any other press (no timer, or the timer task
+// has already been started at least once) advances to the next task.
 void onButtonPress() {
-  if (taskHasTimer && !timerActive) {
+  if (displayMode == "potty") {
+    logPotty();
+  } else if (taskHasTimer && !timerActive) {
     startTimer();
   } else {
     advanceTask();
   }
+}
+
+// Tells the server to log a bathroom visit for this kid, then immediately
+// refreshes the display so the count updates without waiting for the next poll.
+void logPotty() {
+  if (WiFi.status() != WL_CONNECTED) return;
+
+  HTTPClient http;
+  String url = "http://" + String(SERVER_HOST) + ":" + String(SERVER_PORT) +
+               "/api/kids/" + String(KID_ID) + "/potty";
+  http.begin(url);
+  http.setTimeout(4000);
+  int code = http.POST("");
+  http.end();
+
+  if (code != 200) {
+    Serial.printf("POST %s failed, code=%d\n", url.c_str(), code);
+    return;
+  }
+
+  lastPoll = millis();
+  fetchDisplayState();
+  render();
 }
 
 // Tells the server to mark the current task done (which also clears any
@@ -193,7 +227,7 @@ void fetchDisplayState() {
   String body = http.getString();
   http.end();
 
-  StaticJsonDocument<1024> doc;
+  StaticJsonDocument<1280> doc;
   DeserializationError err = deserializeJson(doc, body);
   if (err) {
     Serial.print("JSON parse failed: ");
@@ -207,6 +241,9 @@ void fetchDisplayState() {
   totalTasks = doc["total"] | 0;
   allDone = doc["allDone"] | false;
   starsEarned = doc["starsEarned"] | 0;
+  displayMode = doc["displayMode"] | "tasks";
+  pottyToday = doc["potty"]["today"] | 0;
+  pottyBest = doc["potty"]["best"] | 0;
 
   if (!allDone && !doc["current"].isNull()) {
     currentTaskId = doc["current"]["id"] | -1;
@@ -302,6 +339,27 @@ void drawProgressBar(int x, int y, int w, int h, int current, int total) {
   if (fillW > 0) u8g2.drawBox(x + 1, y + 1, fillW, h - 2);
 }
 
+// Big "high score" style screen shown when this kid's display is set to
+// potty-counter mode. Button presses in this mode log a visit (see
+// onButtonPress/logPotty) instead of advancing the task list.
+void renderPotty() {
+  u8g2.setFont(u8g2_font_9x15B_tr);
+  String big = String(pottyToday);
+  int bw = u8g2.getUTF8Width(big.c_str());
+  u8g2.drawStr((128 - bw) / 2, 42, big.c_str());
+
+  u8g2.setFont(u8g2_font_6x10_tr);
+  String label = "potty visits today";
+  int lw = u8g2.getUTF8Width(label.c_str());
+  u8g2.drawStr((128 - lw) / 2, 54, label.c_str());
+
+  String best = "Best day: " + String(pottyBest);
+  int bestW = u8g2.getUTF8Width(best.c_str());
+  u8g2.drawStr((128 - bestW) / 2, 63, best.c_str());
+
+  u8g2.sendBuffer();
+}
+
 void render() {
   u8g2.clearBuffer();
 
@@ -322,6 +380,11 @@ void render() {
     u8g2.drawDisc(122, 5, 2);
   }
   u8g2.drawHLine(0, 12, 128);
+
+  if (displayMode == "potty") {
+    renderPotty();
+    return;
+  }
 
   if (allDone) {
     u8g2.setFont(u8g2_font_9x15B_tr);

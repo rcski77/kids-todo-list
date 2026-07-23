@@ -46,7 +46,22 @@ db.exec(`
     running INTEGER NOT NULL DEFAULT 0,
     started_at TEXT
   );
+
+  -- One row per bathroom-visit button press, for the potty high-score chart.
+  CREATE TABLE IF NOT EXISTS potty_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    kid_id INTEGER NOT NULL REFERENCES kids(id) ON DELETE CASCADE,
+    day TEXT NOT NULL,
+    logged_at TEXT NOT NULL
+  );
 `);
+
+// Migration: add display_mode to kids created before this column existed.
+// Controls whether a kid's ESP32 shows the task list or the potty counter.
+const kidCols = db.prepare('PRAGMA table_info(kids)').all().map((c) => c.name);
+if (!kidCols.includes('display_mode')) {
+  db.exec("ALTER TABLE kids ADD COLUMN display_mode TEXT NOT NULL DEFAULT 'tasks'");
+}
 
 const DEFAULT_TASKS = [
   ['⏰', 'Wake Up & Stretch', 'Big stretch — arms up high!', 0, 0],

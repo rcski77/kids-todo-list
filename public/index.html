@@ -21,26 +21,37 @@
 
   <div class="kid-selector" id="kidSelector"></div>
 
-  <!-- Global countdown timer -->
-  <div class="global-timer">
-    <div class="g-arc-wrap">
-      <svg viewBox="0 0 52 52">
-        <circle class="g-arc-bg"   cx="26" cy="26" r="21"/>
-        <circle class="g-arc-fill" id="gArcFill" cx="26" cy="26" r="21"
-          stroke-dasharray="131.95" stroke-dashoffset="0"/>
-      </svg>
-    </div>
-    <div class="g-time" id="gTime">–:––</div>
-    <div class="g-timer-right">
-      <div class="g-presets" id="gPresets"></div>
-      <div class="g-btns">
-        <button class="g-btn go" id="gGoBtn">▶ Start</button>
-        <button class="g-btn rst" id="gRstBtn">↺ Reset</button>
-      </div>
-    </div>
+  <div class="view-tabs" id="viewTabs">
+    <button class="view-tab active" data-view="tasks">📋 To-Do List</button>
+    <button class="view-tab" data-view="potty">🚽 Potty Tracker</button>
   </div>
 
-  <div id="kidContent"></div>
+  <div class="view-panel" id="tasksView">
+    <!-- Global countdown timer -->
+    <div class="global-timer">
+      <div class="g-arc-wrap">
+        <svg viewBox="0 0 52 52">
+          <circle class="g-arc-bg"   cx="26" cy="26" r="21"/>
+          <circle class="g-arc-fill" id="gArcFill" cx="26" cy="26" r="21"
+            stroke-dasharray="131.95" stroke-dashoffset="0"/>
+        </svg>
+      </div>
+      <div class="g-time" id="gTime">–:––</div>
+      <div class="g-timer-right">
+        <div class="g-presets" id="gPresets"></div>
+        <div class="g-btns">
+          <button class="g-btn go" id="gGoBtn">▶ Start</button>
+          <button class="g-btn rst" id="gRstBtn">↺ Reset</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="kidContent"></div>
+  </div>
+
+  <div class="view-panel" id="pottyView" style="display:none">
+    <div id="pottyContent"></div>
+  </div>
 
 </div>
 

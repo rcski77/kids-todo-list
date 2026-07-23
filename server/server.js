@@ -47,6 +47,33 @@ function clearTimer(kidId) {
   db.prepare('DELETE FROM timers WHERE kid_id = ?').run(kidId);
 }
 
+// Zero-filled daily potty counts for the last `days` calendar days (oldest first).
+function pottyHistory(kidId, days) {
+  const rows = db
+    .prepare('SELECT day, COUNT(*) AS count FROM potty_events WHERE kid_id = ? GROUP BY day')
+    .all(kidId);
+  const counts = new Map(rows.map((r) => [r.day, r.count]));
+  const result = [];
+  for (let i = days - 1; i >= 0; i--) {
+    const d = new Date();
+    d.setDate(d.getDate() - i);
+    const day = d.toLocaleDateString('en-CA');
+    result.push({ day, count: counts.get(day) || 0 });
+  }
+  return result;
+}
+
+function buildPottySummary(kidId) {
+  const history = pottyHistory(kidId, 7);
+  const today = history[history.length - 1].count;
+  const bestRow = db
+    .prepare(
+      'SELECT COALESCE(MAX(c), 0) AS m FROM (SELECT COUNT(*) AS c FROM potty_events WHERE kid_id = ? GROUP BY day)'
+    )
+    .get(kidId);
+  return { today, best: bestRow.m, history };
+}
+
 function buildState(kid) {
   const tasks = db
     .prepare('SELECT * FROM tasks WHERE kid_id = ? ORDER BY sort_order ASC, id ASC')
@@ -105,6 +132,21 @@ app.post('/api/kids', (req, res) => {
 app.delete('/api/kids/:kidId', (req, res) => {
   db.prepare('DELETE FROM kids WHERE id = ?').run(req.params.kidId);
   res.status(204).end();
+});
+
+// Currently only used to flip which mode a kid's ESP32 is showing
+// (the task list vs. the potty counter).
+app.patch('/api/kids/:kidId', (req, res) => {
+  const kid = getKidOr404(req, res);
+  if (!kid) return;
+  const { displayMode } = req.body;
+  if (displayMode !== undefined) {
+    if (!['tasks', 'potty'].includes(displayMode)) {
+      return res.status(400).json({ error: 'displayMode must be "tasks" or "potty"' });
+    }
+    db.prepare('UPDATE kids SET display_mode = ? WHERE id = ?').run(displayMode, kid.id);
+  }
+  res.json(db.prepare('SELECT * FROM kids WHERE id = ?').get(kid.id));
 });
 
 // ── Tasks (per kid) ──────────────────────────────────
@@ -277,12 +319,42 @@ app.post('/api/kids/:kidId/timer/pause', (req, res) => {
   res.json(buildState(kid));
 });
 
+// ── Potty tracker ────────────────────────────────────
+app.get('/api/kids/:kidId/potty', (req, res) => {
+  const kid = getKidOr404(req, res);
+  if (!kid) return;
+  res.json(buildPottySummary(kid.id));
+});
+
+app.post('/api/kids/:kidId/potty', (req, res) => {
+  const kid = getKidOr404(req, res);
+  if (!kid) return;
+  db.prepare('INSERT INTO potty_events (kid_id, day, logged_at) VALUES (?, ?, ?)').run(
+    kid.id,
+    today(),
+    new Date().toISOString()
+  );
+  res.json(buildPottySummary(kid.id));
+});
+
+// Removes the most recent log for today, for correcting an accidental press.
+app.post('/api/kids/:kidId/potty/undo', (req, res) => {
+  const kid = getKidOr404(req, res);
+  if (!kid) return;
+  const last = db
+    .prepare('SELECT id FROM potty_events WHERE kid_id = ? AND day = ? ORDER BY id DESC LIMIT 1')
+    .get(kid.id, today());
+  if (last) db.prepare('DELETE FROM potty_events WHERE id = ?').run(last.id);
+  res.json(buildPottySummary(kid.id));
+});
+
 // ── Lightweight display feed for the ESP32 ──────────
 app.get('/api/kids/:kidId/display', (req, res) => {
   const kid = getKidOr404(req, res);
   if (!kid) return;
   const state = buildState(kid);
   const index = state.tasks.findIndex((t) => t.id === state.currentTaskId);
+  const potty = buildPottySummary(kid.id);
   res.json({
     kidName: state.kid.name,
     kidEmoji: state.kid.emoji,
@@ -294,6 +366,8 @@ app.get('/api/kids/:kidId/display', (req, res) => {
     allDone: state.allDone,
     starsEarned: state.starsEarned,
     timer: state.timer,
+    displayMode: kid.display_mode,
+    potty: { today: potty.today, best: potty.best },
   });
 });
 

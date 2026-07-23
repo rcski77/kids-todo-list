@@ -51,6 +51,10 @@ config for that kid's display.
   the browser tab, unrelated to server state.
 - Progress resets automatically at midnight (server's local time) and can
   also be reset manually with the reset button on the "all done" screen.
+- A "🚽 Potty Tracker" tab (next to the kid selector) shows each kid's
+  bathroom-visit count for today plus a "high score" bar chart of the last
+  7 days, and a switch that controls whether that kid's ESP32 is currently
+  showing the task list or the potty counter.
 
 ## ESP32 display setup
 
@@ -108,6 +112,12 @@ differently). Note the Nano ESP32 uses Arduino's classic Nano pin labels
    press so the OLED updates without waiting for the next 4-second cycle.
    The button is debounced in firmware, so a single physical press only
    triggers one action.
+6. A kid can be switched into "potty counter" mode from the web app's
+   🚽 Potty Tracker tab. While in that mode, the OLED shows a big count of
+   today's bathroom visits (plus the kid's best day) instead of the task
+   list, and the same physical button logs a visit
+   (`POST /api/kids/<id>/potty`) instead of advancing a task. Switch back
+   to "To-Do List" mode from the same tab to restore normal behavior.
 
 Want a display for each kid? Flash multiple boards, each with its own
 `config.h` pointing at a different `KID_ID` — they all hit the same server.

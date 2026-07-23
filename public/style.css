@@ -114,6 +114,112 @@ header { text-align: center; flex-shrink: 0; }
   box-shadow: var(--shadow);
 }
 
+/* ── View tabs (to-do list vs. potty tracker) ── */
+.view-tabs {
+  flex-shrink: 0;
+  display: flex; gap: 8px; justify-content: center;
+}
+.view-tab {
+  background: rgba(255,255,255,0.7);
+  border: 2.5px solid transparent;
+  border-radius: 50px;
+  padding: 6px 16px;
+  font-family: 'Nunito', sans-serif; font-weight: 800; font-size: 0.82rem;
+  color: #555; cursor: pointer; transition: all 0.15s;
+  -webkit-tap-highlight-color: transparent;
+}
+.view-tab.active {
+  background: #fff; border-color: #4D96FF; color: #1565C0;
+  box-shadow: var(--shadow);
+}
+
+.view-panel {
+  flex: 1; min-height: 0;
+  display: flex; flex-direction: column; gap: 8px;
+}
+
+/* ── Potty tracker ── */
+#pottyContent {
+  flex: 1; min-height: 0;
+  display: flex; flex-direction: column; gap: 8px;
+  overflow-y: auto; -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin; scrollbar-color: rgba(255,184,0,0.4) transparent;
+}
+
+.potty-mode-card, .potty-today-card, .potty-chart-card {
+  flex-shrink: 0;
+  background: rgba(255,255,255,0.88);
+  border-radius: 16px;
+  padding: 12px 14px;
+  box-shadow: var(--shadow);
+}
+
+.potty-mode-label {
+  font-size: 0.68rem; font-weight: 900; color: #999;
+  letter-spacing: 0.6px; text-transform: uppercase; margin-bottom: 6px; text-align: center;
+}
+.potty-mode-switch { display: flex; gap: 6px; }
+.mode-btn {
+  flex: 1;
+  background: #F0F0F0; border: 2px solid #E0E0E0; border-radius: 50px;
+  padding: 8px 6px;
+  font-family: 'Nunito', sans-serif; font-size: 0.82rem; font-weight: 800;
+  color: #777; cursor: pointer; transition: all 0.15s;
+  -webkit-tap-highlight-color: transparent;
+}
+.mode-btn.active {
+  background: linear-gradient(135deg, #4D96FF, #1565C0); border-color: #1565C0; color: #fff;
+}
+
+.potty-today-card { text-align: center; }
+.potty-today-count {
+  font-size: 3.2rem; font-weight: 900; color: #1565C0; line-height: 1;
+}
+.potty-today-sub { font-size: 0.8rem; font-weight: 800; color: #999; margin-top: 2px; }
+.potty-today-btns { display: flex; gap: 8px; margin-top: 10px; }
+.potty-add-btn {
+  flex: 2;
+  background: linear-gradient(135deg, #4D96FF, #1565C0); color: #fff;
+  border: none; border-radius: 50px; padding: 11px 0;
+  font-family: 'Nunito', sans-serif; font-size: 0.95rem; font-weight: 900;
+  cursor: pointer; box-shadow: 0 4px 14px rgba(21,101,192,0.32);
+  transition: transform 0.12s; -webkit-tap-highlight-color: transparent;
+}
+.potty-add-btn:active { transform: scale(0.97); }
+.potty-undo-btn {
+  flex: 1;
+  background: #F0F0F0; color: #888; border: 2px solid #DDD; border-radius: 50px;
+  padding: 9px 0;
+  font-family: 'Nunito', sans-serif; font-size: 0.75rem; font-weight: 800;
+  cursor: pointer; -webkit-tap-highlight-color: transparent;
+}
+
+.potty-chart-title {
+  font-size: 0.8rem; font-weight: 900; color: #555; text-align: center; margin-bottom: 10px;
+}
+.potty-chart-title span { color: #B8860B; }
+.potty-chart {
+  display: flex; align-items: flex-end; justify-content: space-between; gap: 6px;
+  height: 120px;
+}
+.potty-bar-col {
+  flex: 1; height: 100%;
+  display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 4px;
+}
+.potty-bar-count { font-size: 0.72rem; font-weight: 900; color: #555; white-space: nowrap; }
+.potty-bar-track {
+  width: 100%; max-width: 26px; flex: 1;
+  display: flex; align-items: flex-end;
+  background: #F0F0F0; border-radius: 6px; overflow: hidden;
+}
+.potty-bar-fill {
+  width: 100%; min-height: 3px;
+  background: linear-gradient(180deg, #4D96FF, #1565C0);
+  border-radius: 6px 6px 0 0;
+  transition: height 0.4s cubic-bezier(0.34,1.56,0.64,1);
+}
+.potty-bar-label { font-size: 0.66rem; font-weight: 800; color: #999; }
+
 /* ── Global countdown timer ── */
 .global-timer {
   flex-shrink: 0;
