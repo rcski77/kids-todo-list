@@ -7,6 +7,10 @@ async function api(path, options) {
   return res.status === 204 ? null : res.json();
 }
 
+function escapeAttr(str) {
+  return String(str ?? '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+}
+
 async function loadKids() {
   const kids = await api('/kids');
   const el = document.getElementById('kidsList');
@@ -23,17 +27,27 @@ async function loadKids() {
         <button class="danger" data-delete-kid="${kid.id}">Delete kid</button>
       </div>
       <table>
-        <thead><tr><th>#</th><th>Emoji</th><th>Name</th><th>Detail</th><th>Timer</th><th></th></tr></thead>
-        <tbody>
+        <colgroup>
+          <col style="width:24px"><col style="width:60px"><col style="width:22%">
+          <col style="width:32%"><col style="width:110px"><col style="width:64px"><col style="width:36px">
+        </colgroup>
+        <thead><tr><th></th><th>Emoji</th><th>Name</th><th>Detail</th><th>Timer</th><th></th><th></th></tr></thead>
+        <tbody data-tasks-for-kid="${kid.id}">
           ${tasks
             .map(
-              (t, i) => `
-            <tr>
-              <td>${i + 1}</td>
-              <td>${t.emoji}</td>
-              <td>${t.name}</td>
-              <td>${t.detail}</td>
-              <td>${t.has_timer ? t.timer_seconds + 's' : '—'}</td>
+              (t) => `
+            <tr draggable="true" data-task-id="${t.id}">
+              <td class="drag-handle" title="Drag to reorder">☰</td>
+              <td><input class="f-emoji" data-task-id="${t.id}" value="${escapeAttr(t.emoji)}" maxlength="4"></td>
+              <td><input class="f-name" data-task-id="${t.id}" value="${escapeAttr(t.name)}"></td>
+              <td><input class="f-detail" data-task-id="${t.id}" value="${escapeAttr(t.detail)}"></td>
+              <td class="timer-cell">
+                <label class="timer-inline">
+                  <input type="checkbox" class="timer-enabled" data-task-id="${t.id}" ${t.has_timer ? 'checked' : ''}>
+                  <input type="number" class="timer-secs" data-task-id="${t.id}" value="${t.timer_seconds}" min="1">s
+                </label>
+              </td>
+              <td><button data-save-task="${t.id}">Save</button></td>
               <td><button class="danger" data-delete-task="${t.id}">✕</button></td>
             </tr>`
             )
@@ -65,6 +79,21 @@ async function loadKids() {
       loadKids();
     };
   });
+  el.querySelectorAll('[data-save-task]').forEach((btn) => {
+    btn.onclick = async () => {
+      const taskId = btn.dataset.saveTask;
+      const emoji = el.querySelector(`.f-emoji[data-task-id="${taskId}"]`).value;
+      const name = el.querySelector(`.f-name[data-task-id="${taskId}"]`).value;
+      const detail = el.querySelector(`.f-detail[data-task-id="${taskId}"]`).value;
+      const hasTimer = el.querySelector(`.timer-enabled[data-task-id="${taskId}"]`).checked;
+      const secs = el.querySelector(`.timer-secs[data-task-id="${taskId}"]`).value;
+      await api(`/tasks/${taskId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ emoji, name, detail, hasTimer, timerSeconds: Number(secs) || 120 }),
+      });
+      loadKids();
+    };
+  });
   el.querySelectorAll('[data-add-task]').forEach((form) => {
     form.onsubmit = async (e) => {
       e.preventDefault();
@@ -81,6 +110,40 @@ async function loadKids() {
       });
       loadKids();
     };
+  });
+
+  el.querySelectorAll('[data-tasks-for-kid]').forEach((tbody) => {
+    enableDragReorder(tbody, tbody.dataset.tasksForKid);
+  });
+}
+
+function enableDragReorder(tbody, kidId) {
+  let draggedRow = null;
+
+  tbody.querySelectorAll('tr').forEach((row) => {
+    row.addEventListener('dragstart', () => {
+      draggedRow = row;
+      row.classList.add('dragging');
+    });
+
+    row.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      if (!draggedRow || draggedRow === row) return;
+      const bounds = row.getBoundingClientRect();
+      const after = e.clientY - bounds.top > bounds.height / 2;
+      row.parentNode.insertBefore(draggedRow, after ? row.nextSibling : row);
+    });
+  });
+
+  tbody.addEventListener('dragend', async () => {
+    if (draggedRow) draggedRow.classList.remove('dragging');
+    draggedRow = null;
+    const taskIds = [...tbody.querySelectorAll('tr')].map((r) => Number(r.dataset.taskId));
+    await api(`/kids/${kidId}/tasks/reorder`, {
+      method: 'POST',
+      body: JSON.stringify({ taskIds }),
+    });
+    loadKids();
   });
 }
 

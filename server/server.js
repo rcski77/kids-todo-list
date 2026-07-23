@@ -135,6 +135,48 @@ app.post('/api/kids/:kidId/tasks', (req, res) => {
   res.status(201).json(task);
 });
 
+app.patch('/api/tasks/:taskId', (req, res) => {
+  const task = db.prepare('SELECT * FROM tasks WHERE id = ?').get(req.params.taskId);
+  if (!task) return res.status(404).json({ error: 'task not found' });
+
+  const emoji = req.body.emoji !== undefined ? req.body.emoji : task.emoji;
+  const name = req.body.name !== undefined ? req.body.name : task.name;
+  const detail = req.body.detail !== undefined ? req.body.detail : task.detail;
+  const hasTimer = req.body.hasTimer !== undefined ? (req.body.hasTimer ? 1 : 0) : task.has_timer;
+  const timerSeconds =
+    req.body.timerSeconds !== undefined
+      ? Math.max(1, Number(req.body.timerSeconds) || task.timer_seconds)
+      : task.timer_seconds;
+
+  if (!name) return res.status(400).json({ error: 'name is required' });
+
+  db.prepare(
+    'UPDATE tasks SET emoji = ?, name = ?, detail = ?, has_timer = ?, timer_seconds = ? WHERE id = ?'
+  ).run(emoji, name, detail, hasTimer, timerSeconds, task.id);
+  // Avoid a stale in-progress timer referencing the old duration.
+  clearTimer(task.kid_id);
+
+  res.json(db.prepare('SELECT * FROM tasks WHERE id = ?').get(task.id));
+});
+
+// Persists a new task order after drag-and-drop reordering in the admin UI.
+app.post('/api/kids/:kidId/tasks/reorder', (req, res) => {
+  const kid = getKidOr404(req, res);
+  if (!kid) return;
+  const { taskIds } = req.body;
+  if (!Array.isArray(taskIds)) return res.status(400).json({ error: 'taskIds must be an array' });
+
+  const setOrder = db.prepare('UPDATE tasks SET sort_order = ? WHERE id = ? AND kid_id = ?');
+  const applyOrder = db.transaction((ids) => {
+    ids.forEach((id, i) => setOrder.run(i, id, kid.id));
+  });
+  applyOrder(taskIds);
+
+  res.json(
+    db.prepare('SELECT * FROM tasks WHERE kid_id = ? ORDER BY sort_order ASC, id ASC').all(kid.id)
+  );
+});
+
 app.delete('/api/tasks/:taskId', (req, res) => {
   db.prepare('DELETE FROM tasks WHERE id = ?').run(req.params.taskId);
   res.status(204).end();
