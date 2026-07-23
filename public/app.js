@@ -63,6 +63,9 @@ async function init() {
   renderKidSkeleton();
   await refreshState();
   setInterval(refreshState, POLL_MS);
+  setInterval(() => {
+    if (currentView === 'potty') refreshPotty();
+  }, POLL_MS);
 }
 
 function switchView(view) {
