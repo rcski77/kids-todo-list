@@ -92,11 +92,22 @@ differently). Note the Nano ESP32 uses Arduino's classic Nano pin labels
    - A `task N / total` counter and a progress bar
    - A celebratory "ALL DONE!" screen with the star count once every task
      for that day is complete
-5. Pressing the button calls `POST /api/kids/<id>/advance`, which marks
-   whichever task is currently active as done (same effect as tapping
-   "Done!" in the web app), then immediately re-polls so the OLED updates
-   without waiting for the next 4-second cycle. The button is debounced in
-   firmware, so a single press only advances one task.
+   - For a task with a timer (e.g. Brush Teeth), the detail line is
+     replaced by a live `Ready / Running / Paused  M:SS` countdown once
+     it's been started
+5. The button's behavior depends on the current task:
+   - **No timer**: press advances to the next task
+     (`POST /api/kids/<id>/advance`), same as tapping "Done!" in the web app.
+   - **Has a timer, not started yet**: press starts the countdown
+     (`POST /api/kids/<id>/timer/start`) instead of advancing.
+   - **Has a timer, already started**: press advances to the next task and
+     clears the timer, exactly like the no-timer case.
+   
+   So for Brush Teeth: first press starts the 2-minute countdown, second
+   press moves on. Either way, the display immediately re-polls after a
+   press so the OLED updates without waiting for the next 4-second cycle.
+   The button is debounced in firmware, so a single physical press only
+   triggers one action.
 
 Want a display for each kid? Flash multiple boards, each with its own
 `config.h` pointing at a different `KID_ID` — they all hit the same server.

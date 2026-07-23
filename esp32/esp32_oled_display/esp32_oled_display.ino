@@ -36,11 +36,25 @@ const unsigned long DEBOUNCE_MS = 40;
 String kidName;
 int taskIndex = 0;
 int totalTasks = 0;
+int currentTaskId = -1;
 String taskEmojiLabel; // not rendered (no emoji glyphs on this font), kept for reference
 String taskName;
 String taskDetail;
 bool allDone = false;
 int starsEarned = 0;
+
+// Timer for the current task (e.g. brush teeth), mirrored from the server's
+// /display feed. remainingAtSync/syncedAtMillis let us tick the countdown
+// locally between polls instead of only updating it every 4 seconds.
+bool taskHasTimer = false;
+int taskTimerTotal = 0;
+bool timerActive = false;   // true once it's been started at least once today
+bool timerRunning = false;
+int remainingAtSync = 0;
+unsigned long syncedAtMillis = 0;
+
+unsigned long lastRenderTick = 0;
+const unsigned long RENDER_TICK_MS = 1000;
 
 void setup() {
   Serial.begin(115200);
@@ -67,6 +81,12 @@ void loop() {
     lastPoll = millis();
     fetchDisplayState();
     render();
+    lastRenderTick = millis();
+  } else if (millis() - lastRenderTick >= RENDER_TICK_MS) {
+    // No network round-trip here — just redraw with the locally ticked
+    // countdown so the timer visibly counts down every second.
+    lastRenderTick = millis();
+    render();
   }
   delay(10);
 }
@@ -84,15 +104,27 @@ void checkButton() {
     buttonState = reading;
     Serial.printf("BUTTON_PIN (D4) is now %s\n", buttonState == HIGH ? "HIGH (pressed)" : "LOW (released)");
     if (buttonState == HIGH) {
-      advanceTask();
+      onButtonPress();
     }
   }
 
   lastButtonReading = reading;
 }
 
-// Tells the server to mark the current task done, then immediately
-// refreshes the display so it doesn't wait for the next poll cycle.
+// For a timer task that hasn't been started yet, the first press starts
+// the timer instead of advancing. Any other press (no timer, or the timer
+// task has already been started at least once) advances to the next task.
+void onButtonPress() {
+  if (taskHasTimer && !timerActive) {
+    startTimer();
+  } else {
+    advanceTask();
+  }
+}
+
+// Tells the server to mark the current task done (which also clears any
+// timer state for it), then immediately refreshes the display so it
+// doesn't wait for the next poll cycle.
 void advanceTask() {
   if (WiFi.status() != WL_CONNECTED) return;
 
@@ -102,6 +134,30 @@ void advanceTask() {
   http.begin(url);
   http.setTimeout(4000);
   int code = http.POST("");
+  http.end();
+
+  if (code != 200) {
+    Serial.printf("POST %s failed, code=%d\n", url.c_str(), code);
+    return;
+  }
+
+  lastPoll = millis();
+  fetchDisplayState();
+  render();
+}
+
+// Starts the countdown for the current timer task.
+void startTimer() {
+  if (WiFi.status() != WL_CONNECTED || currentTaskId < 0) return;
+
+  HTTPClient http;
+  String url = "http://" + String(SERVER_HOST) + ":" + String(SERVER_PORT) +
+               "/api/kids/" + String(KID_ID) + "/timer/start";
+  http.begin(url);
+  http.addHeader("Content-Type", "application/json");
+  http.setTimeout(4000);
+  String body = "{\"taskId\":" + String(currentTaskId) + "}";
+  int code = http.POST(body);
   http.end();
 
   if (code != 200) {
@@ -153,16 +209,42 @@ void fetchDisplayState() {
   starsEarned = doc["starsEarned"] | 0;
 
   if (!allDone && !doc["current"].isNull()) {
+    currentTaskId = doc["current"]["id"] | -1;
     taskEmojiLabel = doc["current"]["emoji"].as<String>();
     taskName = doc["current"]["name"].as<String>();
     taskDetail = doc["current"]["detail"].as<String>();
+    taskHasTimer = doc["current"]["hasTimer"] | false;
+    taskTimerTotal = doc["current"]["timerSeconds"] | 0;
   } else {
+    currentTaskId = -1;
     taskName = "";
     taskDetail = "";
+    taskHasTimer = false;
+    taskTimerTotal = 0;
   }
+
+  if (taskHasTimer && !doc["timer"].isNull()) {
+    timerActive = true;
+    timerRunning = doc["timer"]["running"] | false;
+    remainingAtSync = doc["timer"]["remainingSeconds"] | 0;
+  } else {
+    timerActive = false;
+    timerRunning = false;
+    remainingAtSync = taskTimerTotal;
+  }
+  syncedAtMillis = millis();
 
   haveData = true;
   lastFetchOk = true;
+}
+
+// Remaining seconds on the current task's timer, ticked locally since the
+// last time we synced with the server (only advances while running).
+int currentTimerRemaining() {
+  if (!timerRunning) return remainingAtSync;
+  long elapsedSec = (millis() - syncedAtMillis) / 1000;
+  long remaining = remainingAtSync - elapsedSec;
+  return remaining > 0 ? (int)remaining : 0;
 }
 
 // ── Rendering ──────────────────────────────────────
@@ -261,9 +343,19 @@ void render() {
   u8g2.setFont(u8g2_font_7x14B_tr);
   drawWrapped(taskName.c_str(), 0, 37, 128, 14, 1);
 
-  // Detail line
+  // Detail line — replaced by the countdown for timer tasks once started.
   u8g2.setFont(u8g2_font_6x10_tr);
-  drawWrapped(taskDetail.c_str(), 0, 51, 128, 10, 1);
+  if (taskHasTimer) {
+    int remaining = currentTimerRemaining();
+    int m = remaining / 60;
+    int s = remaining % 60;
+    char buf[24];
+    const char* status = !timerActive ? "Ready" : (timerRunning ? "Running" : "Paused");
+    snprintf(buf, sizeof(buf), "%s  %d:%02d", status, m, s);
+    u8g2.drawStr(0, 51, buf);
+  } else {
+    drawWrapped(taskDetail.c_str(), 0, 51, 128, 10, 1);
+  }
 
   // Progress bar along the very bottom
   drawProgressBar(0, 59, 128, 5, taskIndex - 1, totalTasks);

@@ -12,12 +12,14 @@ const POLL_MS = 4000;
 let kids = [];
 let currentKidId = null;
 let lastStateJSON = null;
-let brushTimerVisible = false;
 
 // ── Global "get ready" timer (local, not tied to any kid) ──
 let gTotal = 0, gLeft = 0, gRunning = false, gInterval = null;
 
-// ── Brush teeth mini-timer (local, resets whenever the active task changes) ──
+// ── Brush teeth mini-timer ──
+// The countdown is authoritative on the server (so the web app and the
+// ESP32 display agree on it); these locals just mirror it for a smooth
+// per-second UI tick between polls.
 const BRUSH_TOTAL_DEFAULT = 120;
 let brushTotal = BRUSH_TOTAL_DEFAULT;
 let brushLeft = BRUSH_TOTAL_DEFAULT, brushRunning = false, brushInterval = null;
@@ -169,7 +171,7 @@ function renderHero(state) {
   document.getElementById('heroEmoji').textContent = task.emoji;
   document.getElementById('heroName').textContent = task.name;
   document.getElementById('heroDetail').textContent = task.detail;
-  showBrushTimer(task.hasTimer, task.id, task.timerSeconds);
+  showBrushTimer(task.hasTimer, task.id, task.timerSeconds, state.timer);
 }
 
 function renderTimeline(state) {
@@ -200,7 +202,6 @@ function renderTimeline(state) {
 async function completeCurrentTask() {
   const state = JSON.parse(lastStateJSON);
   if (!state.currentTaskId) return;
-  resetBrushTimerState();
   const updated = await api(`/kids/${currentKidId}/complete/${state.currentTaskId}`, { method: 'POST' });
   const prevState = state;
   lastStateJSON = JSON.stringify(updated);
@@ -311,56 +312,79 @@ function timerDone() {
 }
 
 /* ═══ BRUSH TIMER ═══ */
-function showBrushTimer(show, taskId, timerSeconds) {
+// The countdown itself is authoritative on the server (see /timer/start and
+// /timer/pause); these functions just mirror that into a smooth local
+// per-second tick and reconcile with the server on every poll.
+function showBrushTimer(show, taskId, timerSeconds, timerInfo) {
   const block = document.getElementById('brushTimerBlock');
   if (!block) return;
+  block.style.display = show ? 'block' : 'none';
+  if (!show) {
+    stopBrushInterval();
+    return;
+  }
   if (taskId !== brushTaskId) {
-    resetBrushTimerState();
     brushTaskId = taskId;
     brushTotal = timerSeconds || BRUSH_TOTAL_DEFAULT;
-    brushLeft = brushTotal;
   }
-  block.style.display = show ? 'block' : 'none';
-  if (!show) stopBrushTimer();
+  syncBrushFromServer(timerInfo);
+}
+
+// Applies the server's view of the timer (or "not started" if null) and
+// starts/stops the local 1-second tick to match.
+function syncBrushFromServer(timerInfo) {
+  if (timerInfo) {
+    brushLeft = timerInfo.remainingSeconds;
+    brushRunning = timerInfo.running;
+  } else {
+    brushLeft = brushTotal;
+    brushRunning = false;
+  }
+  updateBrushButton();
   updateBrushUI();
+
+  const finished = brushLeft <= 0;
+  if (brushRunning && !finished && !brushInterval) {
+    brushInterval = setInterval(() => {
+      brushLeft = Math.max(0, brushLeft - 1);
+      updateBrushUI();
+      if (brushLeft <= 0) {
+        stopBrushInterval();
+        brushRunning = false;
+        updateBrushButton();
+        if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
+        miniConfetti();
+      }
+    }, 1000);
+  } else if ((!brushRunning || finished) && brushInterval) {
+    stopBrushInterval();
+  }
 }
 
-function resetBrushTimerState() {
-  stopBrushTimer();
-  brushLeft = brushTotal;
-  updateBrushUI();
+function stopBrushInterval() {
+  clearInterval(brushInterval);
+  brushInterval = null;
 }
 
-function toggleBrushTimer() {
-  brushRunning ? stopBrushTimer() : startBrushTimer();
-}
-
-function startBrushTimer() {
-  if (brushLeft <= 0) brushLeft = brushTotal;
-  brushRunning = true;
+function updateBrushButton() {
   const btn = document.getElementById('brushGoBtn');
-  btn.textContent = '⏸ Pause';
-  btn.classList.add('running');
-  btn.classList.remove('finished');
-  brushInterval = setInterval(() => {
-    brushLeft--;
-    updateBrushUI();
-    if (brushLeft <= 0) { stopBrushTimer(); brushDone(); }
-  }, 1000);
+  if (!btn) return;
+  const finished = brushLeft <= 0;
+  btn.classList.toggle('running', brushRunning && !finished);
+  btn.classList.toggle('finished', finished);
+  btn.textContent = finished ? '✓ Done!' : brushRunning ? '⏸ Pause' : '▶ Start';
 }
 
-function stopBrushTimer() {
-  brushRunning = false;
-  clearInterval(brushInterval); brushInterval = null;
-  const btn = document.getElementById('brushGoBtn');
-  if (btn) { btn.textContent = '▶ Start'; btn.classList.remove('running'); }
-}
-
-function brushDone() {
-  if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
-  const btn = document.getElementById('brushGoBtn');
-  if (btn) { btn.textContent = '✓ Done!'; btn.classList.add('finished'); }
-  miniConfetti();
+async function toggleBrushTimer() {
+  const prevState = JSON.parse(lastStateJSON);
+  const updated = brushRunning
+    ? await api(`/kids/${currentKidId}/timer/pause`, { method: 'POST' })
+    : await api(`/kids/${currentKidId}/timer/start`, {
+        method: 'POST',
+        body: JSON.stringify({ taskId: brushTaskId }),
+      });
+  lastStateJSON = JSON.stringify(updated);
+  render(updated, prevState);
 }
 
 function updateBrushUI() {

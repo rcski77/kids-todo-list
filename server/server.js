@@ -22,6 +22,31 @@ function getKidOr404(req, res) {
   return kid;
 }
 
+// Computes a timer row's live remaining time, accounting for time elapsed
+// since it was last started (if it's currently running).
+function computeTimerRemaining(row) {
+  if (!row.running) return row.remaining_seconds;
+  const elapsedSec = Math.floor((Date.now() - Date.parse(row.started_at)) / 1000);
+  return Math.max(0, row.remaining_seconds - elapsedSec);
+}
+
+// Returns the live timer state for a kid, but only if it belongs to the
+// task passed in (a stale timer from a since-completed task is ignored).
+function getTimerForTask(kidId, taskId) {
+  if (!taskId) return null;
+  const row = db.prepare('SELECT * FROM timers WHERE kid_id = ?').get(kidId);
+  if (!row || row.task_id !== taskId) return null;
+  return {
+    totalSeconds: row.total_seconds,
+    remainingSeconds: computeTimerRemaining(row),
+    running: !!row.running,
+  };
+}
+
+function clearTimer(kidId) {
+  db.prepare('DELETE FROM timers WHERE kid_id = ?').run(kidId);
+}
+
 function buildState(kid) {
   const tasks = db
     .prepare('SELECT * FROM tasks WHERE kid_id = ? ORDER BY sort_order ASC, id ASC')
@@ -55,6 +80,7 @@ function buildState(kid) {
     starsEarned: doneIds.size,
     totalTasks: tasks.length,
     allDone,
+    timer: currentTask ? getTimerForTask(kid.id, currentTask.id) : null,
   };
 }
 
@@ -128,6 +154,7 @@ app.post('/api/kids/:kidId/complete/:taskId', (req, res) => {
   db.prepare(
     'INSERT OR IGNORE INTO completions (task_id, kid_id, day, completed_at) VALUES (?, ?, ?, ?)'
   ).run(req.params.taskId, kid.id, day, new Date().toISOString());
+  clearTimer(kid.id);
   res.json(buildState(kid));
 });
 
@@ -142,6 +169,7 @@ app.post('/api/kids/:kidId/advance', (req, res) => {
     db.prepare(
       'INSERT OR IGNORE INTO completions (task_id, kid_id, day, completed_at) VALUES (?, ?, ?, ?)'
     ).run(state.currentTaskId, kid.id, day, new Date().toISOString());
+    clearTimer(kid.id);
   }
   res.json(buildState(kid));
 });
@@ -155,6 +183,7 @@ app.post('/api/kids/:kidId/uncomplete/:taskId', (req, res) => {
     kid.id,
     day
   );
+  clearTimer(kid.id);
   res.json(buildState(kid));
 });
 
@@ -163,6 +192,46 @@ app.post('/api/kids/:kidId/reset', (req, res) => {
   if (!kid) return;
   const day = today();
   db.prepare('DELETE FROM completions WHERE kid_id = ? AND day = ?').run(kid.id, day);
+  clearTimer(kid.id);
+  res.json(buildState(kid));
+});
+
+// ── Task timer (e.g. the brush-teeth countdown) ─────
+// Server-authoritative so the web app and the ESP32 display agree on how
+// much time is left, regardless of which one started/paused it.
+app.post('/api/kids/:kidId/timer/start', (req, res) => {
+  const kid = getKidOr404(req, res);
+  if (!kid) return;
+  const { taskId } = req.body;
+  const task = db.prepare('SELECT * FROM tasks WHERE id = ? AND kid_id = ?').get(taskId, kid.id);
+  if (!task) return res.status(400).json({ error: 'invalid taskId' });
+
+  const existing = db.prepare('SELECT * FROM timers WHERE kid_id = ?').get(kid.id);
+  const now = new Date().toISOString();
+
+  if (existing && existing.task_id === Number(taskId) && existing.remaining_seconds > 0) {
+    // Resume from wherever it was left (paused or already running).
+    db.prepare('UPDATE timers SET running = 1, started_at = ? WHERE kid_id = ?').run(now, kid.id);
+  } else {
+    db.prepare(
+      `INSERT OR REPLACE INTO timers (kid_id, task_id, total_seconds, remaining_seconds, running, started_at)
+       VALUES (?, ?, ?, ?, 1, ?)`
+    ).run(kid.id, task.id, task.timer_seconds, task.timer_seconds, now);
+  }
+  res.json(buildState(kid));
+});
+
+app.post('/api/kids/:kidId/timer/pause', (req, res) => {
+  const kid = getKidOr404(req, res);
+  if (!kid) return;
+  const row = db.prepare('SELECT * FROM timers WHERE kid_id = ?').get(kid.id);
+  if (row && row.running) {
+    const remaining = computeTimerRemaining(row);
+    db.prepare('UPDATE timers SET running = 0, remaining_seconds = ?, started_at = NULL WHERE kid_id = ?').run(
+      remaining,
+      kid.id
+    );
+  }
   res.json(buildState(kid));
 });
 
@@ -182,6 +251,7 @@ app.get('/api/kids/:kidId/display', (req, res) => {
       : null,
     allDone: state.allDone,
     starsEarned: state.starsEarned,
+    timer: state.timer,
   });
 });
 

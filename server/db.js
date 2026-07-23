@@ -36,6 +36,16 @@ db.exec(`
     completed_at TEXT NOT NULL,
     UNIQUE(task_id, day)
   );
+
+  -- At most one active/paused timer per kid, for whichever task is running it.
+  CREATE TABLE IF NOT EXISTS timers (
+    kid_id INTEGER PRIMARY KEY REFERENCES kids(id) ON DELETE CASCADE,
+    task_id INTEGER NOT NULL,
+    total_seconds INTEGER NOT NULL,
+    remaining_seconds INTEGER NOT NULL,
+    running INTEGER NOT NULL DEFAULT 0,
+    started_at TEXT
+  );
 `);
 
 const DEFAULT_TASKS = [
